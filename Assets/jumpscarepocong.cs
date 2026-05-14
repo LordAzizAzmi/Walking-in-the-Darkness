@@ -14,6 +14,11 @@ public class PocongJumpscareSpawner : MonoBehaviour
     public AudioClip jumpscareSound;          // Suara jumpscare
     private AudioSource audioSource;
 
+    [Header("Blind Effect")]
+    public CanvasGroup blackScreen;   // drag UI hitam ke sini
+    public float fadeSpeed = 2f;
+    public float blindDuration = 2f;
+
     private void Start()
     {
         if (pocongPrefab != null)
@@ -42,6 +47,10 @@ public class PocongJumpscareSpawner : MonoBehaviour
 
             ShowPocong();
             yield return new WaitForSeconds(showDuration);
+
+            // efek buta sebelum hilang
+            yield return StartCoroutine(BlindEffect());
+
             HidePocong();
         }
     }
@@ -98,6 +107,26 @@ public class PocongJumpscareSpawner : MonoBehaviour
     {
         if (pocongPrefab != null)
             pocongPrefab.SetActive(false);
+    }
+
+    IEnumerator BlindEffect()
+    {
+        // Fade ke hitam
+        while (blackScreen.alpha < 1)
+        {
+            blackScreen.alpha += Time.deltaTime * fadeSpeed;
+            yield return null;
+        }
+
+        // tahan layar hitam
+        yield return new WaitForSeconds(blindDuration);
+
+        // Fade balik normal
+        while (blackScreen.alpha > 0)
+        {
+            blackScreen.alpha -= Time.deltaTime * fadeSpeed;
+            yield return null;
+        }
     }
 }
 

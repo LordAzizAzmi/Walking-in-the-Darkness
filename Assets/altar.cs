@@ -5,7 +5,7 @@ using UnityEngine.SceneManagement;
 public class AltarCheck : MonoBehaviour
 {
     [Header("Senjata yang dibutuhkan")]
-    public List<string> requiredWeaponIDs = new List<string> { "kujang", "kris", "topeng" };
+    public List<string> requiredWeaponIDs = new List<string> { "kujang", "topeng" };
 
     private HashSet<string> placedWeapons = new HashSet<string>();
 

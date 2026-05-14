@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.AI;
 using System.Collections;
+using UnityEngine.XR.Interaction.Toolkit;
+
 
 [RequireComponent(typeof(NavMeshAgent))]
 [RequireComponent(typeof(AudioSource))]
@@ -26,6 +28,11 @@ public class GhostRoamAutoAI : MonoBehaviour
     public Animator animator;
     public bool useAnimation = true;           // true = gunakan animasi jika tersedia
     private string detectedAnimState = "";     // otomatis scan state di Animator
+
+    [Header("Player Slow Effect")]
+    public float slowMultiplier = 3f;   // 0.5 = setengah speed
+    public float slowDuration = 5f;       // durasi slow
+    private bool isSlowingPlayer = false;
 
     private NavMeshAgent agent;
     private AudioSource audioSource;
@@ -163,5 +170,32 @@ public class GhostRoamAutoAI : MonoBehaviour
         Gizmos.color = Color.red;
         if (player != null)
             Gizmos.DrawWireSphere(transform.position, activationDistance);
+    }
+
+    void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Player") && !isSlowingPlayer)
+        {
+            StartCoroutine(SlowPlayer(other));
+        }
+    }
+    IEnumerator SlowPlayer(Collider playerCollider)
+    {
+        isSlowingPlayer = true;
+
+        var moveProvider = playerCollider.GetComponentInParent<ContinuousMoveProviderBase>();
+
+        if (moveProvider != null)
+        {
+            float originalSpeed = moveProvider.moveSpeed;
+
+            moveProvider.moveSpeed *= slowMultiplier;
+
+            yield return new WaitForSeconds(slowDuration);
+
+            moveProvider.moveSpeed = originalSpeed;
+        }
+
+        isSlowingPlayer = false;
     }
 }

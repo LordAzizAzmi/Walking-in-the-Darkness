@@ -18,6 +18,10 @@ public class HantuAI : MonoBehaviour
     public AudioClip attackSound;
     public float roamSoundInterval = 15f;
 
+    [Header("Chase Tuning")]
+    public float pathUpdateInterval = 0.3f;
+    public float minDistanceToUpdatePath = 1f;
+
     private NavMeshAgent agent;
     private Animator anim;
     private AudioSource audioSource;
@@ -27,6 +31,11 @@ public class HantuAI : MonoBehaviour
     private Vector3 roamDestination;
     private bool isChasing = false;
     private bool isAttacking = false;
+
+    // tambahan untuk chase dari kode1
+    private float lastPathUpdateTime = 0f;
+    private Vector3 lastDestination;
+    private Vector3 lastTargetPos;
 
     void Start()
     {
@@ -44,14 +53,25 @@ public class HantuAI : MonoBehaviour
         audioSource.maxDistance = 20f;
         audioSource.rolloffMode = AudioRolloffMode.Linear;
 
-        agent.stoppingDistance = 0.5f;
+        // Agent defaults
+        agent.stoppingDistance = attackDistance;
+        agent.autoBraking = false;
+        agent.speed = roamSpeed;
+
         roamTimer = roamInterval;
         roamSoundTimer = roamSoundInterval;
+
+        lastDestination = transform.position;
+        lastTargetPos = target != null ? target.position : Vector3.zero;
     }
 
     void Update()
     {
         if (target == null || agent == null) return;
+
+        // hitung jarak & prediksi kecepatan target (digunakan untuk update path)
+        Vector3 playerVelocity = (target.position - lastTargetPos) / Mathf.Max(Time.deltaTime, 0.0001f);
+        lastTargetPos = target.position;
 
         float distance = Vector3.Distance(transform.position, target.position);
 
@@ -61,7 +81,7 @@ public class HantuAI : MonoBehaviour
         }
         else if (distance <= detectDistance)
         {
-            ChasePlayer();
+            ChasePlayer_WithPathUpdates(playerVelocity);
         }
         else
         {
@@ -76,16 +96,14 @@ public class HantuAI : MonoBehaviour
     }
 
     // -------------------
-    // === BEHAVIOR ===
+    // === ROAMING ===
     // -------------------
-
     void RoamRandomly()
     {
         agent.speed = roamSpeed;
         roamTimer += Time.deltaTime;
         roamSoundTimer += Time.deltaTime;
 
-        // Bergerak acak
         if (!agent.pathPending && agent.remainingDistance < 0.5f && roamTimer >= roamInterval)
         {
             roamDestination = GetRandomNavmeshLocation(roamRadius);
@@ -93,14 +111,13 @@ public class HantuAI : MonoBehaviour
             roamTimer = 0f;
         }
 
-        // Suara roaming
         if (roamSound != null && roamSoundTimer >= roamSoundInterval)
         {
             audioSource.PlayOneShot(roamSound);
             roamSoundTimer = 0f;
         }
 
-        // Reset state
+        // reset chase
         if (isChasing)
         {
             StopChaseSound();
@@ -111,18 +128,31 @@ public class HantuAI : MonoBehaviour
             anim.ResetTrigger("Attack");
     }
 
-    void ChasePlayer()
+    // -------------------
+    // === CHASE (dari kode1, dipakai di kode2) ===
+    // -------------------
+    void ChasePlayer_WithPathUpdates(Vector3 playerVelocity)
     {
         if (target == null) return;
 
         agent.speed = chaseSpeed;
         agent.isStopped = false;
-        agent.SetDestination(target.position);
 
+        // pertama kali mulai chase: segera set destination
         if (!isChasing)
         {
+            SetChaseDestination(target.position);
             PlayChaseSound();
             isChasing = true;
+        }
+        else
+        {
+            // update path periodik atau jika player berpindah lebih dari minDistanceToUpdatePath
+            if (Time.time >= lastPathUpdateTime + pathUpdateInterval ||
+                Vector3.Distance(target.position, lastDestination) > minDistanceToUpdatePath)
+            {
+                SetChaseDestination(GetPredictedPosition(playerVelocity));
+            }
         }
 
         if (anim != null)
@@ -131,6 +161,24 @@ public class HantuAI : MonoBehaviour
         isAttacking = false;
     }
 
+    Vector3 GetPredictedPosition(Vector3 playerVelocity)
+    {
+        // prediksi sederhana: jika bergerak, offset sedikit
+        return playerVelocity.magnitude > 0.1f
+            ? target.position + Vector3.Lerp(playerVelocity * 0.5f, Vector3.zero, 0.5f)
+            : target.position;
+    }
+
+    void SetChaseDestination(Vector3 targetPos)
+    {
+        lastDestination = targetPos;
+        lastPathUpdateTime = Time.time;
+        agent.SetDestination(targetPos);
+    }
+
+    // -------------------
+    // === ATTACK ===
+    // -------------------
     void AttackPlayer()
     {
         if (isAttacking) return;
@@ -146,7 +194,7 @@ public class HantuAI : MonoBehaviour
         if (attackSound != null)
             audioSource.PlayOneShot(attackSound);
 
-        // Kembali ke chase setelah 2 detik
+        // Kembali ke chase setelah 2 detik (atau sesuai kebutuhan)
         Invoke(nameof(ResetAttack), 2f);
     }
 
@@ -159,7 +207,6 @@ public class HantuAI : MonoBehaviour
     // -------------------
     // === NAVMESH ===
     // -------------------
-
     Vector3 GetRandomNavmeshLocation(float radius)
     {
         Vector3 randomDirection = Random.insideUnitSphere * radius;
@@ -176,14 +223,17 @@ public class HantuAI : MonoBehaviour
     // -------------------
     // === AUDIO ===
     // -------------------
-
     void PlayChaseSound()
     {
         if (chaseSound != null)
         {
-            audioSource.clip = chaseSound;
-            audioSource.loop = true;
-            audioSource.Play();
+            // hanya set clip jika belum sama, supaya tidak restart terus
+            if (audioSource.clip != chaseSound)
+            {
+                audioSource.clip = chaseSound;
+                audioSource.loop = true;
+                audioSource.Play();
+            }
         }
     }
 
